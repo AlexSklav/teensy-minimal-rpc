@@ -1,8 +1,6 @@
 from __future__ import absolute_import
 from nose.tools import with_setup, eq_
 import teensy_minimal_rpc as tr
-from six.moves import filter
-from six.moves import range
 
 
 def setup_func():

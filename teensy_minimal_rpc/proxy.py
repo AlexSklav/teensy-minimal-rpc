@@ -1,5 +1,4 @@
-from __future__ import absolute_import
-import datetime as dt
+# coding: utf-8
 import logging
 import uuid
 
@@ -15,8 +14,7 @@ try:
     import arduino_helpers.hardware.teensy as teensy
 
     from .adc_sampler import AdcDmaMixin
-    from .node import (Proxy as _Proxy, I2cProxy as _I2cProxy,
-                       SerialProxy as _SerialProxy)
+    from .node import (Proxy as _Proxy, I2cProxy as _I2cProxy, SerialProxy as _SerialProxy)
     from .config import Config
     from .state import State
 
@@ -42,7 +40,7 @@ try:
 
         @property
         def uuid(self):
-            '''
+            """
             Returns
             -------
 
@@ -51,9 +49,8 @@ try:
 
 
             [1]: https://www.pjrc.com/teensy/K20P64M72SF1RM.pdf
-            '''
-            return uuid.UUID(bytes=np.array(self._uuid(),
-                                            dtype='uint8').tostring())
+            """
+            return uuid.UUID(bytes=np.array(self._uuid(), dtype='uint8').tostring())
 
 
     class StateMixin(StateMixinBase):
@@ -63,12 +60,12 @@ try:
 
 
     class ProxyMixin(ConfigMixin, StateMixin, AdcDmaMixin):
-        '''
+        """
         Mixin class to add convenience wrappers around methods of the generated
         `node.Proxy` class.
 
         For example, expose config and state getters/setters as attributes.
-        '''
+        """
         host_package_name = str(path(__file__).parent.name.replace('_', '-'))
 
         def __init__(self, *args, **kwargs):

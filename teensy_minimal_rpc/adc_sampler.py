@@ -1,25 +1,23 @@
 # -*- coding: utf-8 -*-
-from __future__ import division
-from __future__ import absolute_import
-import datetime as dt
 import io
 import pkgutil
 import weakref
 
-from six.moves import range
+import numpy as np
+import pandas as pd
+import datetime as dt
+
 import arduino_helpers.hardware.teensy as teensy
 import arduino_helpers.hardware.teensy.adc as adc
 import arduino_helpers.hardware.teensy.dma as dma
 import arduino_helpers.hardware.teensy.pdb as pdb
-import numpy as np
-import pandas as pd
-import six
-import teensy_minimal_rpc.DMA as DMA
-import teensy_minimal_rpc.SIM as SIM
+
+from . import DMA
+from . import SIM
 
 
 def get_adc_configs(F_BUS=48e6, ADC_CLK=22e6):
-    '''
+    """
     Returns
     -------
     pandas.DataFrame
@@ -40,7 +38,7 @@ def get_adc_configs(F_BUS=48e6, ADC_CLK=22e6):
     .. versionchanged:: X.X.X
         Load table of ADC configurations using ``pkgutil`` to support reading
         from ``.zip`` files, e.g., Py2Exe ``library.zip`` packaged modules.
-    '''
+    """
     # Read serialized (CSV) table of all possible ADC configurations (not all
     # valid).
     #
@@ -50,15 +48,15 @@ def get_adc_configs(F_BUS=48e6, ADC_CLK=22e6):
     df_adc_configs = pd.read_csv(io.BytesIO(csv_data))
 
     df_adc_configs = (df_adc_configs
-                      .loc[(df_adc_configs['CFG2[ADACKEN]'] == 0) &
-                           (df_adc_configs['CFG1[ADICLK]'] == 1)])
+    .loc[(df_adc_configs['CFG2[ADACKEN]'] == 0) &
+         (df_adc_configs['CFG1[ADICLK]'] == 1)])
     df_adc_configs.insert(3, 'CFG1[ADIV]', 0)
     df_adc_configs['ADC_CLK'] = ADC_CLK
 
     # Maximum ADC clock for 16-bit conversion is 11MHz.
     df_adc_configs.loc[(df_adc_configs['Bit-width'] >= 16) &
                        (df_adc_configs['ADC_CLK'] > 11e6),
-                       'ADC_CLK'] = 11e6
+    'ADC_CLK'] = 11e6
     # If the ADC clock is 8MHz or higher, ADHSC (high-speed clock) bit
     # must be set.
     df_adc_configs.loc[df_adc_configs.ADC_CLK >= 8e6, 'CFG2[ADHSC]'] = 1
@@ -91,8 +89,9 @@ TCD_RECORD_DTYPE = [('SADDR', 'uint32'),
                     ('CSR', 'uint16'),
                     ('BITER', 'uint16')]
 
-class AdcSampler(object):
-    '''
+
+class AdcSampler:
+    """
     This class manages configuration of an analog-to-digital converter (ADC)
     and three DMA channels to sample multiple measurements from one or more
     analog input channels.
@@ -110,13 +109,14 @@ class AdcSampler(object):
         List of identifiers of DMA channels to use (default=``[0, 1, 2]``).
     adc_number : int
         Identifier of ADC to use (default=:data:`teensy.ADC_0`)
-    '''
+    """
+
     def __init__(self, proxy, channels, sample_count,
                  dma_channels=None, adc_number=teensy.ADC_0):
         # Use weak reference to prevent zombie `proxy` staying alive even after
         # deleting the original `proxy` reference.
         self.proxy = weakref.ref(proxy)
-        if isinstance(channels, six.string_types):
+        if isinstance(channels, str):
             # Single channel was specified.  Wrap channel in list.
             channels = [channels]
         self.channels = channels
@@ -265,7 +265,7 @@ class AdcSampler(object):
                                     self.N)
 
     def configure_dma_channel_adc_channel_configs(self):
-        '''
+        """
         Configure DMA channel ``adc_channel_configs`` to copy SC1A
         configurations from :attr:`channel_sc1as`, one at a time, to the
         :data:`ADC0_SC1A` register (i.e., ADC Status and Control Register 1).
@@ -280,7 +280,7 @@ class AdcSampler(object):
         in `K20P64M72SF1RM`_ manual.
 
         .. _K20P64M72SF1RM: https://www.pjrc.com/teensy/K20P64M72SF1RM.pdf
-        '''
+        """
         sca1_tcd_msg = \
             DMA.TCD(CITER_ELINKNO=
                     DMA.R_TCD_ITER_ELINKNO(ELINK=False,
@@ -303,7 +303,7 @@ class AdcSampler(object):
                                     sca1_tcd_msg)
 
     def configure_dma_channel_adc_channel_configs_mux(self):
-        '''
+        """
         Configure DMA channel ``adc_channel_configs`` to trigger based on
         programmable delay block timer.
 
@@ -319,7 +319,7 @@ class AdcSampler(object):
         (20.3.1/366)** in `K20P64M72SF1RM`_ manual.
 
         .. _K20P64M72SF1RM: https://www.pjrc.com/teensy/K20P64M72SF1RM.pdf
-        '''
+        """
         # Configure DMA channel `i` enable to use MUX triggering from
         # programmable delay block.
         self.proxy().update_dma_mux_chcfg(self.dma_channels.adc_channel_configs,
@@ -334,7 +334,7 @@ class AdcSampler(object):
             DMA.Registers(SERQ=int(self.dma_channels.adc_channel_configs)))
 
     def configure_dma_channel_adc_conversion_mux(self):
-        '''
+        """
         Set mux source for DMA channel ``adc_conversion`` to ADC0 and enable
         DMA for ADC0.
 
@@ -347,13 +347,13 @@ class AdcSampler(object):
         `K20P64M72SF1RM`_ manual.
 
         .. _K20P64M72SF1RM: https://www.pjrc.com/teensy/K20P64M72SF1RM.pdf
-        '''
+        """
         self.proxy().update_dma_mux_chcfg(
             self.dma_channels.adc_conversion,
             DMA.MUX_CHCFG(
                 # Route ADC0 as DMA channel source.
                 SOURCE=dma.DMAMUX_SOURCE_ADC0,
-                TRIG=False,# Disable periodic trigger.
+                TRIG=False,  # Disable periodic trigger.
                 # Enable the DMAMUX configuration for channel.
                 ENBL=True))
         # Update ADC0_SC2 to enable DMA and assert the ADC DMA request during
@@ -362,7 +362,7 @@ class AdcSampler(object):
         self.proxy().enableDMA(teensy.ADC_0)
 
     def configure_dma_channel_adc_conversion(self):
-        '''
+        """
         Configure DMA channel ``adc_conversion`` to:
 
          - Copy result after completion of each ADC conversion to subsequent
@@ -390,7 +390,7 @@ class AdcSampler(object):
         in `K20P64M72SF1RM`_ manual.
 
         .. _K20P64M72SF1RM: https://www.pjrc.com/teensy/K20P64M72SF1RM.pdf
-        '''
+        """
         # **NOTE**: "When the CITER field is initially loaded by software, it
         # must be set to the same value as that contained in the BITER field."
         # CITER is current major iteration count, and BITER is the
@@ -433,7 +433,7 @@ class AdcSampler(object):
             DMA.Registers(SERQ=int(self.dma_channels.adc_conversion)))
 
     def configure_dma_channel_scatter(self):
-        '''
+        """
         Configure a Transfer Control Descriptor structure for *each scan* of
         the analog input channels, copy TCD structures to device, and attach
         DMA interrupt handler to scatter DMA channel.
@@ -455,7 +455,7 @@ class AdcSampler(object):
         :meth:`configure_dma_channel_adc_channel_configs`
 
         :meth:`configure_dma_channel_adc_conversion`
-        '''
+        """
         # Create Transfer Control Descriptor configuration for first chunk, encoded
         # as a Protocol Buffer message.
         tcd0_msg = DMA.TCD(CITER_ELINKNO=DMA.R_TCD_ITER_ELINKNO(ITER=1),
@@ -506,7 +506,7 @@ class AdcSampler(object):
         self.proxy().attach_dma_interrupt(self.dma_channels.scatter)
 
     def configure_adc(self):
-        '''
+        """
         Select ``b`` input for ADC MUX.
 
         Notes
@@ -526,15 +526,15 @@ class AdcSampler(object):
         `K20P64M72SF1RM`_ manual.
 
         .. _K20P64M72SF1RM: https://www.pjrc.com/teensy/K20P64M72SF1RM.pdf
-        '''
-        import teensy_minimal_rpc.ADC as ADC
+        """
+        from . import ADC
 
         self.proxy().update_adc_registers(
             self.adc_number,
             ADC.Registers(CFG2=ADC.R_CFG2(MUXSEL=ADC.R_CFG2.B)))
 
     def configure_timer(self, sample_rate_hz):
-        '''
+        """
         Configure programmable delay block according to specified sampling
         rate, but **do not** copy configuration to ``PDB_CONFIG`` register.
 
@@ -561,7 +561,7 @@ class AdcSampler(object):
         `K20P64M72SF1RM`_ manual.
 
         .. _K20P64M72SF1RM: https://www.pjrc.com/teensy/K20P64M72SF1RM.pdf
-        '''
+        """
         # Set PDB interrupt to occur when IDLY is equal to CNT + 1.
         # PDB0_IDLY = 1
         self.proxy().mem_cpy_host_to_device(pdb.PDB0_IDLY,
@@ -585,7 +585,7 @@ class AdcSampler(object):
         return PDB_CONFIG
 
     def start_read(self, sample_rate_hz=None, stream_id=0):
-        '''
+        """
         **TODO** Throw exception if previous read has not completed yet.
         Otherwise, this method may clobber a currently running DMA ADC read
         operation, potentially rendering the microcontroller unresponsive.
@@ -638,7 +638,7 @@ class AdcSampler(object):
         in `K20P64M72SF1RM`_ manual.
 
         .. _K20P64M72SF1RM: https://www.pjrc.com/teensy/K20P64M72SF1RM.pdf
-        '''
+        """
         self.proxy().attach_dma_interrupt(self.dma_channels.scatter)
         if sample_rate_hz is None and self.sample_rate_hz is None:
             raise ValueError('No cached sampling rate available.  Must specify'
@@ -656,7 +656,7 @@ class AdcSampler(object):
         return self
 
     def get_results(self):
-        '''
+        """
         Returns
         -------
         pandas.DataFrame
@@ -669,7 +669,7 @@ class AdcSampler(object):
 
             **TODO** Provide mechanism to poll status of previously started
             read.
-        '''
+        """
         data = self.proxy().mem_cpy_device_to_host(self.allocs.samples,
                                                    self.sample_count * self.N)
         df_adc_results = pd.DataFrame(data.view('uint16')
@@ -678,7 +678,7 @@ class AdcSampler(object):
         return df_adc_results
 
     def get_results_async(self, timeout_s=None):
-        '''
+        """
         Returns
         -------
         pandas.DataFrame
@@ -691,7 +691,7 @@ class AdcSampler(object):
         Notes
         -----
             **Does not guarantee result is ready!**
-        '''
+        """
         stream_queue = self.proxy()._packet_watcher.queues.stream
         frames = []
 
@@ -726,13 +726,14 @@ class AdcSampler(object):
         self.allocs[['sc1as', 'tcds']].map(self.proxy().mem_aligned_free)
 
 
-class AdcDmaMixin(object):
-    '''
+class AdcDmaMixin:
+    """
     This mixin class implements DMA-enabled analog-to-digital converter (ADC)
     methods.
-    '''
+    """
+
     def init_dma(self):
-        '''
+        """
         Initialize eDMA engine.  This includes:
 
          - Enabling clock gating for DMA and DMA mux.
@@ -746,8 +747,8 @@ class AdcDmaMixin(object):
          - (21.3.17/415) TCD registers
 
         [1]: https://www.pjrc.com/teensy/K20P64M72SF1RM.pdf
-        '''
-        from teensy_minimal_rpc.SIM import R_SCGC6, R_SCGC7
+        """
+        from .SIM import R_SCGC6, R_SCGC7
 
         # Enable DMA-related clocks in clock-gating configuration
         # registers.
@@ -762,7 +763,7 @@ class AdcDmaMixin(object):
             self.reset_dma_TCD(i)
 
     def DMA_TCD(self, dma_channel):
-        '''
+        """
         Parameters
         ----------
         dma_channel : int
@@ -780,20 +781,20 @@ class AdcDmaMixin(object):
             described.
 
         [1]: http://www.freescale.com/products/arm-processors/kinetis-cortex-m/adc-calculator:ADC_CALCULATOR
-        '''
+        """
         from arduino_rpc.protobuf import resolve_field_values
         import arduino_helpers.hardware.teensy.dma as dma
-        from teensy_minimal_rpc.DMA import TCD
+        from .DMA import TCD
 
         tcd = TCD.FromString(self.read_dma_TCD(dma_channel).tostring())
         df_tcd = resolve_field_values(tcd)
         return (df_tcd[['full_name', 'value']].dropna()
                 .join(dma.TCD_DESCRIPTIONS, on='full_name')
                 [['full_name', 'value', 'short_description', 'page']]
-                .sort_values(['page','full_name']))
+                .sort_values(['page', 'full_name']))
 
     def DMA_registers(self):
-        '''
+        """
         Returns
         -------
         pandas.DataFrame
@@ -805,20 +806,20 @@ class AdcDmaMixin(object):
             described.
 
         [1]: http://www.freescale.com/products/arm-processors/kinetis-cortex-m/adc-calculator:ADC_CALCULATOR
-        '''
+        """
         from arduino_rpc.protobuf import resolve_field_values
         import arduino_helpers.hardware.teensy.dma as dma
-        from teensy_minimal_rpc.DMA import Registers
+        from .DMA import Registers
 
         dma_registers = (Registers
-                            .FromString(self.read_dma_registers().tostring()))
+                         .FromString(self.read_dma_registers().tostring()))
         df_dma = resolve_field_values(dma_registers)
         return (df_dma.dropna(subset=['value'])
-                .join(dma.REGISTERS_DESCRIPTIONS, on='full_name')
-                [['full_name', 'value', 'short_description', 'page']])
+        .join(dma.REGISTERS_DESCRIPTIONS, on='full_name')
+        [['full_name', 'value', 'short_description', 'page']])
 
     def tcd_msg_to_struct(self, tcd_msg):
-        '''
+        """
         Convert Transfer Control Descriptor from Protocol Buffer message
         encoding to raw structure, i.e., 32 bytes starting from `SADDR`
         field.
@@ -842,7 +843,7 @@ class AdcDmaMixin(object):
         :meth:`tcd_struct_to_msg`
 
         [1]: https://www.pjrc.com/teensy/K20P64M72SF1RM.pdf
-        '''
+        """
         # Copy TCD to device so that we can extract the raw bytes from
         # device memory (raw TCD bytes are read into `tcd0`.
         #
@@ -853,11 +854,10 @@ class AdcDmaMixin(object):
         #  - Add `arduino_helpers.hardware.teensy` function to convert
         #    between TCD protobuf message and binary TCD struct.
         self.update_dma_TCD(0, tcd_msg)
-        return (self.mem_cpy_device_to_host(HW_TCDS_ADDR, 32)
-                .view(TCD_RECORD_DTYPE)[0])
+        return self.mem_cpy_device_to_host(HW_TCDS_ADDR, 32).view(TCD_RECORD_DTYPE)[0]
 
     def tcd_struct_to_msg(self, tcd_struct):
-        '''
+        """
         Convert Transfer Control Descriptor from raw structure (i.e., 32
         bytes starting from ``SADDR`` field) to Protocol Buffer message
         encoding.
@@ -880,8 +880,8 @@ class AdcDmaMixin(object):
         :meth:`tcd_msg_to_struct`
 
         [1]: https://www.pjrc.com/teensy/K20P64M72SF1RM.pdf
-        '''
-        from teensy_minimal_rpc.DMA import TCD
+        """
+        from .DMA import TCD
 
         # Copy TCD structure to device so that we can extract the
         # serialized protocol buffer representation from the device.
@@ -901,7 +901,7 @@ class AdcDmaMixin(object):
                             resolution=None, average_count=1,
                             sampling_rate_hz=None, differential=False,
                             gain_power=0, adc_num=teensy.ADC_0):
-        '''
+        """
         Configure ADC sampler to read multiple samples from a single ADC
         channel, using the minimum conversion rate for specified sampling
         parameters.
@@ -992,10 +992,10 @@ class AdcDmaMixin(object):
             :meth:`teensy_minimal_rpc.adc_sampler.AdcSampler.get_results_async`
             method may be called to fetch results from a previously
             initiated read operation.
-        '''
+        """
         # XXX Import here, since importing at top of file seems to cause a
         # cyclic import error when importing `__init__`.
-        import teensy_minimal_rpc.ADC as ADC
+        from . import ADC
 
         # Select ADC settings to achieve minimum conversion rate for
         # specified resolution, mode (i.e., single-ended or differential),
@@ -1003,7 +1003,7 @@ class AdcDmaMixin(object):
         # count).
         bit_width = resolution
 
-        if isinstance(adc_channels, six.string_types):
+        if isinstance(adc_channels, str):
             # Single channel was specified.  Wrap channel in list.
             adc_channels = [adc_channels]
 
@@ -1016,7 +1016,7 @@ class AdcDmaMixin(object):
 
         if differential:
             if (resolution is not None) and ((resolution < 16) and not
-                                             (resolution & 0x01)):
+            (resolution & 0x01)):
                 # An even number of bits was specified for resolution in
                 # differential mode. However, bit-widths are actually
                 # increased by one bit, where the additional bit indicates
@@ -1069,7 +1069,7 @@ class AdcDmaMixin(object):
         adc_settings['differential'] = differential
 
         # Verify that a valid gain value has been specified.
-        assert(gain_power >= 0 and gain_power < 8)
+        assert (gain_power >= 0 and gain_power < 8)
         adc_settings['gain_power'] = int(gain_power)
 
         # Construct a Protocol Buffer message according to the selected ADC
@@ -1133,7 +1133,7 @@ class AdcDmaMixin(object):
                      average_count=1, sampling_rate_hz=None,
                      differential=False, gain_power=0,
                      adc_num=teensy.ADC_0, timeout_s=None):
-        '''
+        """
         Read multiple samples from a single ADC channel, using the minimum
         conversion rate for specified sampling parameters.
 
@@ -1181,7 +1181,7 @@ class AdcDmaMixin(object):
         See also
         --------
         :meth:`analog_reads_config`
-        '''
+        """
         sample_rate_hz, adc_settings, adc_sampler = \
             self.analog_reads_config(adc_channels, sample_count,
                                      resolution=resolution,
@@ -1203,7 +1203,7 @@ class AdcDmaMixin(object):
 
 
 def format_adc_results(df_adc_results, adc_settings):
-    '''
+    """
     Convert raw ADC readings to actual voltages.
 
     Parameters
@@ -1220,7 +1220,7 @@ def format_adc_results(df_adc_results, adc_settings):
         Voltage readings (based on reference voltage and gain).
     df_adc_results : pandas.DataFrame
         Raw ADC values (from input argument).
-    '''
+    """
     dtype = 'int16' if adc_settings.differential else 'uint16'
     df_adc_results = df_adc_results.astype(dtype)
     scale = adc_settings.reference_V / (1 << (adc_settings.resolution +

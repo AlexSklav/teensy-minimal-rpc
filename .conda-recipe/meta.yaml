@@ -1,58 +1,36 @@
-{% set PKG_NAME = 'teensy-minimal-rpc' %}
-{% set LIB_NAME = 'TeensyMinimalRpc' %}
-{% set MODULE_NAME = PKG_NAME.replace('-', '_') %}
-
 {% if GIT_DESCRIBE_NUMBER > '0' %}
 {% set GIT_VERSION = GIT_DESCRIBE_TAG[1:] + '.post' + GIT_DESCRIBE_NUMBER %}
 {% else %}
 {% set GIT_VERSION = GIT_DESCRIBE_TAG[1:] %}
 {% endif %}
-
-# source will be downloaded prior to filling in jinja templates
-# Example assumes that this folder has setup.py in it
-source:
-  git_url: ../
-
-#: .. versionadded:: 0.7
-build:
-  #: .. versionadded:: 0.8
-  noarch: python
-  script:
-    # Generate Arduino `library.properties` file
-    - python -m paver generate_arduino_library_properties
-    # Generate Arduino code
-    - python -m paver generate_all_code
-    # Copy Arduino library to Conda include directory
-    - python -c
-        "import os.path; import os; import shutil; import platformio_helpers as pioh;
-        lib_src_dir = os.path.join(os.environ['SRC_DIR'], 'lib',
-                                   '{{ LIB_NAME }}');
-        install_dir = pioh.conda_arduino_include_path().joinpath('{{ LIB_NAME }}');
-        shutil.copytree(lib_src_dir, install_dir);
-        "
-    # Generate `setup.py` from `pavement.py` definition.
-    - python -m paver generate_setup
-    # Install source directory as Python package.
-    - python -B setup.py install --single-version-externally-managed --record record.txt
-
+{% set PKG_NAME = 'teensy-minimal-rpc' %}
+{% set LIB_NAME = 'TeensyMinimalRpc' %}
+{% set MODULE_NAME = PKG_NAME.replace('-', '_') %}
 package:
   name: {{ PKG_NAME }}
   version: {{ GIT_VERSION }}
 
+build:
+  # If this is a new build for the same version, increment the build
+  # number. If you do not include this key, it defaults to 0.
+  number: 0
+  noarch: python
+  script:
+    # Copy Arduino library to Conda include directory and generate Arduino `library.properties` file
+    - python file_handler.py {{ SRC_DIR }} {{ PREFIX }} {{ PKG_NAME }} {{ MODULE_NAME }} {{ LIB_NAME }}
+    # Run setup
+    - python setup.py install --single-version-externally-managed --record record.txt
+
 requirements:
   build:
-    #: .. versionchanged:: 0.8.1
-    - base-node-rpc >=0.48
-    #: .. versionadded:: 0.7
-    - conda-helpers >=0.15
-    - future
-    - paver
+    - python >=3.8
+    - path-helpers
+    - conda-helpers
+    - platformio-helpers
+    - base-node-rpc
+    - dropbot-headers
     - pip
-    - python
-    #: .. versionadded:: 0.7
-    - six
 
-# .. versionadded:: 0.8
 #     Split into `noarch` C++ header package and platform-specific Python
 #     package.
 outputs:
@@ -60,20 +38,23 @@ outputs:
     noarch: generic
     files:
       - share
+    requirements:
+      run:
+        - platformio
+        - dropbot-headers
   - name: {{ PKG_NAME }}
     noarch: python
     files:
-      - Lib/site-packages/{{ MODULE_NAME }}
+      - {{ SP_DIR }}/{{ MODULE_NAME }}
     requirements:
       run:
+        - python >=3.8
         - {{ pin_subpackage(PKG_NAME + '-dev', max_pin='x.x') }}
-        #: .. versionchanged:: 0.8.1
-        - base-node-rpc >=0.48
-        #: .. versionadded:: 0.7
-        - conda-helpers >=0.15
-        - python
-        #: .. versionadded:: 0.7
-        - six
+        - path-helpers
+        - conda-helpers
+        - platformio-helpers
+        - base-node-rpc
+
     test:
       imports:
         - teensy_minimal_rpc.ADC
@@ -89,3 +70,10 @@ outputs:
 about:
   home: https://github.com/sci-bots/{{ PKG_NAME }}
   license: MIT
+  summary: Template project demonstrating use of Arduino base node RPC framework.
+
+# source will be downloaded prior to filling in jinja templates
+# Example assumes that this folder has setup.py in it
+source:
+#  git_url: ../
+  path: ..

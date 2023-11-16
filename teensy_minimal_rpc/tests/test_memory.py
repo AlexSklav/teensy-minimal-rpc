@@ -2,7 +2,6 @@ from __future__ import absolute_import
 import nose.tools as nt
 import numpy as np
 import teensy_minimal_rpc as tr
-from six.moves import range
 
 
 def setup_func():
