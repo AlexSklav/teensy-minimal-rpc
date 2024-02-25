@@ -2,7 +2,6 @@
 *.hex
 *.pyc
 .ropeproject
-setup.py
 docs/build
 dist/*
 build/*
