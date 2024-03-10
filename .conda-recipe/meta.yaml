@@ -23,7 +23,7 @@ build:
 
 requirements:
   build:
-    - python >=3.6
+    - python {{ python }}
     - path-helpers
     - conda-helpers
     - platformio-helpers
@@ -55,17 +55,18 @@ outputs:
         - platformio-helpers
         - base-node-rpc
 
-    test:
-      imports:
-        - teensy_minimal_rpc.ADC
-        - teensy_minimal_rpc.DMA
-        - teensy_minimal_rpc.PIT
-        - teensy_minimal_rpc.SIM
-        - teensy_minimal_rpc.adc_sampler
-        - teensy_minimal_rpc.config
-        - teensy_minimal_rpc.node
-        - teensy_minimal_rpc.proxy
-        - teensy_minimal_rpc.state
+test:
+  imports:
+    - {{ MODULE_NAME }}
+    - {{ MODULE_NAME + '.ADC' }}
+    - {{ MODULE_NAME + '.DMA' }}
+    - {{ MODULE_NAME + '.PIT' }}
+    - {{ MODULE_NAME + '.SIM' }}
+    - {{ MODULE_NAME + '.adc_sampler' }}
+    - {{ MODULE_NAME + '.config' }}
+    - {{ MODULE_NAME + '.node' }}
+    - {{ MODULE_NAME + '.proxy' }}
+    - {{ MODULE_NAME + '.state' }}
 
 about:
   home: https://github.com/sci-bots/{{ PKG_NAME }}
@@ -75,5 +76,5 @@ about:
 # source will be downloaded prior to filling in jinja templates
 # Example assumes that this folder has setup.py in it
 source:
-#  git_url: ../
-  path: ..
+  git_url: ../
+#  path: ..
