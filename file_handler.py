@@ -14,9 +14,9 @@ from path_helpers import path
 from arduino_rpc.helpers import generate_arduino_library_properties
 from base_node_rpc.helpers import generate_all_code
 
-DEFAULT_ARDUINO_BOARDS = ['uno', 'mega2560']
+DEFAULT_ARDUINO_BOARDS = []
 
-PLATFORMIO_ENVS = ['uno', 'pro8MHzatmega328', 'teensy31', 'micro', 'megaADK', 'megaatmega2560']
+PLATFORMIO_ENVS = ['teensy31']
 
 
 def get_properties(**kwargs) -> Dict:
@@ -39,12 +39,8 @@ def get_properties(**kwargs) -> Dict:
                       url=url
                       )
 
-    meta = dict(short_description='Base classes for Arduino RPC node/device.',
-                long_description='Provides: 1) A memory-efficient set of base classes providing an API to most '
-                                 'of the Arduino API, including EEPROM access, raw I2C master-write/slave-request,'
-                                 ' etc., and 2) Support for processing RPC command requests through either serial '
-                                 'or I2C interface.  Utilizes Python (host) and C++ (device) code generation from '
-                                 'the `arduino_rpc` (https://github.com/sci-bots/arduino_rpc.git) package.',
+    meta = dict(short_description='Template project demonstrating use of Arduino base node RPC framework.',
+                long_description='',
                 author='Christian Fobel',
                 author_email='christian@fobel.net',
                 version=version,
@@ -55,11 +51,18 @@ def get_properties(**kwargs) -> Dict:
 
     lib_properties = {**properties, **meta}
 
-    options = dict(rpc_module=import_module(module_name) if module_name else None,
+    options = dict(pointer_width=32,
+                   rpc_module=import_module(module_name) if module_name else None,
                    PROPERTIES=properties,
                    LIB_PROPERTIES=lib_properties,
-                   DEFAULT_ARDUINO_BOARDS=DEFAULT_ARDUINO_BOARDS,
-                   PLATFORMIO_ENVS=PLATFORMIO_ENVS,
+                   base_classes=['BaseNodeSerialHandler',
+                                 'BaseNodeEeprom',
+                                 'BaseNodeI2c',
+                                 'BaseNodeI2cHandler<Handler>',
+                                 'BaseNodeConfig<ConfigMessage, Address>',
+                                 'BaseNodeState<StateMessage>'],
+                   rpc_classes=[f'{module_name}::Node'],
+                   DEFAULT_ARDUINO_BOARDS=DEFAULT_ARDUINO_BOARDS
                    )
 
     return {**kwargs, **options}
