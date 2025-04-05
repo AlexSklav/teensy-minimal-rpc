@@ -2,8 +2,6 @@
 import sys
 import argparse
 
-import platformio_helpers as pioh
-
 from teensy_minimal_rpc import __version__ as VERSION
 
 
@@ -21,7 +19,5 @@ def parse_args(sys_args=None):
 
 if __name__ == '__main__':
     args, extra_args = parse_args()
-
-    extra_args += [f'-I{lib}' for lib in pioh.conda_arduino_include_path().walkdirs()]
 
     print(' '.join(extra_args))
