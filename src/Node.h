@@ -17,7 +17,7 @@
 #include <BaseNodeRpc/BaseNodeSerialHandler.h>
 #include <BaseNodeRpc/BaseNodeState.h>
 #include <BaseNodeRpc/SerialHandler.h>
-//#include <ADC.h>
+#include <ADC.h>
 #include <AnalogBufferDMA.h>
 #include <DMAChannel.h>
 #include <TeensyMinimalRpc/ADC.h>  // Analog to digital converter
