@@ -20,12 +20,14 @@ void Node::begin() {
 
 
 void Node::set_i2c_address(uint8_t value) {
-  // Validator expects `uint32_t` by reference.
+  // Convert to uint32_t as required by the method
   uint32_t address = value;
-  /* Validate address and update the active `Wire` configuration if the address
-   * is valid. */
-  config_.validator_.i2c_address_(address, config_._.i2c_address);
-  config_._.i2c_address = address;
+  
+  // Use the inherited method to validate and apply the I2C address
+  if (on_config_i2c_address_changed(address)) {
+    // If address is valid, update the configuration
+    config_._.i2c_address = address;
+  }
 }
 
 }  // namespace teensy_minimal_rpc
