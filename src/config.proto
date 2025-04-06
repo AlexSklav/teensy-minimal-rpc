@@ -1,3 +1,4 @@
+syntax="proto2";
 package teensy_minimal_rpc;
 
 message Config {

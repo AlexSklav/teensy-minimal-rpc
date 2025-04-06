@@ -1,3 +1,4 @@
+syntax="proto2";
 package teensy._3_1.dma;
 
 
