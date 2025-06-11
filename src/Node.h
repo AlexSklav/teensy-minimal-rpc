@@ -420,7 +420,8 @@ public:
       NVIC_DISABLE_IRQ(IRQ_DMA_CH0 + dma_channel);
   }
   bool dma_start(uint32_t buffer_size) {
-    const bool power_of_two = (buffer_size && !(buffer_size & (buffer_size - 1)));
+    const bool power_of_two = (buffer_size &&
+                               !(buffer_size & (buffer_size - 1)));
     if ((buffer_size > ADC_BUFFER_SIZE) || !power_of_two) { return false; }
     dma_stop();
     dmaBuffer_ = new RingBufferDMA(teensy_minimal_rpc::adc_buffer, buffer_size);
@@ -586,10 +587,10 @@ public:
       case(2): speed_ = ADC_CONVERSION_SPEED::MED_SPEED; break;
       case(3): speed_ = ADC_CONVERSION_SPEED::HIGH_SPEED; break;
       case(4): speed_ = ADC_CONVERSION_SPEED::VERY_HIGH_SPEED; break;
-      case(24): speed_ = ADC_CONVERSION_SPEED::ADACK_2_4; break;
-      case(40): speed_ = ADC_CONVERSION_SPEED::ADACK_4_0; break;
-      case(52): speed_ = ADC_CONVERSION_SPEED::ADACK_5_2; break;
-      case(62): speed_ = ADC_CONVERSION_SPEED::ADACK_6_2; break;
+      case(16): speed_ = ADC_CONVERSION_SPEED::ADACK_2_4; break;
+      case(17): speed_ = ADC_CONVERSION_SPEED::ADACK_4_0; break;
+      case(18): speed_ = ADC_CONVERSION_SPEED::ADACK_5_2; break;
+      case(19): speed_ = ADC_CONVERSION_SPEED::ADACK_6_2; break;
       default: speed_ = ADC_CONVERSION_SPEED::VERY_LOW_SPEED;
     }
     if (adc_num == 0){adc_->adc0->setConversionSpeed(speed_);}
