@@ -1,27 +1,12 @@
-from __future__ import absolute_import
-from nose.tools import with_setup
+import itertools
+
 import numpy as np
-import teensy_minimal_rpc as tr
+import pytest
 
 
-def setup_func():
-    global proxy
-    proxy = tr.SerialProxy()
-
-
-def teardown_func():
-    global proxy
-    del proxy
-
-
-@with_setup(setup_func, teardown_func)
-def test_rms():
-    for N_i in (16, 32, 1024, 8 * 1024):
-        for auto_mean_ij in (True, False):
-            yield check_rms, N_i, auto_mean_ij
-
-
-def check_rms(N, auto_mean):
+@pytest.mark.parametrize("N,auto_mean", list(itertools.product(
+    (16, 32, 1024, 8 * 1024), (True, False))))
+def test_rms(proxy, N, auto_mean):
     '''
     Compare teensy root mean square vs numpy calculation.
     '''
@@ -52,6 +37,6 @@ def check_rms(N, auto_mean):
                                          .view('uint8'))
 
         teensy_rms = rms_func(data_addr, N)
-        assert(np.isclose(py_rms, teensy_rms))
+        assert np.isclose(py_rms, teensy_rms)
     finally:
         proxy.mem_free(data_addr)

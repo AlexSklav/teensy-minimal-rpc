@@ -24,6 +24,7 @@ build:
 requirements:
   build:
     - python {{ python }}
+    - setuptools
     - path-helpers
     - conda-helpers
     - platformio-helpers
@@ -56,6 +57,8 @@ outputs:
         - base-node-rpc
 
 test:
+  requires:
+    - pytest
   imports:
     - {{ MODULE_NAME }}
     - {{ MODULE_NAME + '.ADC' }}

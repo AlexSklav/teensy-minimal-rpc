@@ -1,21 +1,7 @@
-from __future__ import absolute_import
-from nose.tools import with_setup
 import numpy as np
-import teensy_minimal_rpc as tr
 
 
-def setup_func():
-    global proxy
-    proxy = tr.SerialProxy()
-
-
-def teardown_func():
-    global proxy
-    del proxy
-
-
-@with_setup(setup_func, teardown_func)
-def test_float_performance():
+def test_float_performance(proxy):
     '''
     Compare float performance against empirical results.
     '''
@@ -26,8 +12,7 @@ def test_float_performance():
     np.testing.assert_allclose(emperical_flop_us, flop_us, rtol=1e-2)
 
 
-@with_setup(setup_func, teardown_func)
-def test_int_performance():
+def test_int_performance(proxy):
     '''
     Compare integer performance against empirical results.
     '''

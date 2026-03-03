@@ -1,29 +1,15 @@
-from __future__ import absolute_import
-import nose.tools as nt
 import numpy as np
-import teensy_minimal_rpc as tr
+import pytest
 
 
-def setup_func():
-    global proxy
-    proxy = tr.SerialProxy()
-
-
-def teardown_func():
-    global proxy
-    del proxy
-
-
-@nt.with_setup(setup_func, teardown_func)
-def test_get_buffer():
+def test_get_buffer(proxy):
     '''
     Test retrieving node buffer contents.
     '''
     proxy.get_buffer()
 
 
-@nt.with_setup(setup_func, teardown_func)
-def test_malloc_free():
+def test_malloc_free(proxy):
     '''
     Test dynamic memory allocation on Teensy.
     '''
@@ -32,22 +18,17 @@ def test_malloc_free():
     # Allocate 1024 bytes on Teensy device.
     data_addr = proxy.mem_alloc(1 << 10)
     # Verify at least the amount of requested memory has been allocated.
-    nt.assert_greater_equal(start_ram_free - proxy.ram_free(), 1 << 10)
+    assert start_ram_free - proxy.ram_free() >= 1 << 10
     proxy.mem_free(data_addr)
     # Verify memory has been freed.
-    nt.eq_(proxy.ram_free(), start_ram_free)
+    assert proxy.ram_free() == start_ram_free
 
 
-@nt.with_setup(setup_func, teardown_func)
-def test_mem_copy():
+@pytest.mark.parametrize("N", [16, 32, 1024, 2048])
+def test_mem_copy(proxy, N):
     '''
     Test copying between host memory and device memory.
     '''
-    for N_i in (16, 32, 1024, 2048):
-        yield check_mem_copy, N_i
-
-
-def check_mem_copy(N):
     # Select CHUNK_SIZE as a multiple of 2, allow up to 16 bytes for packet
     # header.
     CHUNK_SIZE = 2 * (proxy.max_serial_payload_size() // 2) - 16
@@ -67,14 +48,9 @@ def check_mem_copy(N):
         proxy.mem_free(data_addr)
 
 
-@nt.with_setup(setup_func, teardown_func)
-def test_mem_fill():
-    for value_i in (np.uint8(123), np.uint16(1234), np.uint32(876543),
-                    np.float32(98.765)):
-        yield check_mem_fill, value_i
-
-
-def check_mem_fill(value):
+@pytest.mark.parametrize("value", [np.uint8(123), np.uint16(1234),
+                                   np.uint32(876543), np.float32(98.765)])
+def test_mem_fill(proxy, value):
     '''
     Test filling device memory with scalar value.
     '''
@@ -85,7 +61,7 @@ def check_mem_fill(value):
     try:
         # Fill device memory with value 1234.
         fill_type = (value.dtype.name
-                     if not 'float' in value.dtype.name else 'float')
+                     if 'float' not in value.dtype.name else 'float')
         f_mem_fill = getattr(proxy, 'mem_fill_' + fill_type)
         f_mem_fill(data_addr, value, 512)
         device_data = proxy.mem_cpy_device_to_host(data_addr, 512 *
@@ -96,23 +72,18 @@ def check_mem_fill(value):
         proxy.mem_free(data_addr)
 
 
-@nt.with_setup(setup_func, teardown_func)
-def test_str_echo():
+def test_str_echo(proxy):
     '''
     Test sending a string to device and back again.
     '''
     value = 'hello, world'
-    nt.eq_(proxy.str_echo(msg=value).tostring(), value)
+    assert proxy.str_echo(msg=value).tobytes() == value
 
 
-@nt.with_setup(setup_func, teardown_func)
-def test_echo_array():
+@pytest.mark.parametrize("array", [np.arange(100, dtype='uint32'),
+                                   list(range(100))])
+def test_echo_array(proxy, array):
     '''
     Test sending an array of unsigned 32-bit integers to device and back again.
     '''
-    yield check_echo_array, np.arange(100, dtype='uint32')
-    yield check_echo_array, list(range(100))
-
-
-def check_echo_array(array):
     np.testing.assert_array_equal(proxy.echo_array(array=array), array)
