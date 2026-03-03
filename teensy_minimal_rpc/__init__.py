@@ -25,7 +25,7 @@ def conda_arduino_include_path():
         return ch.conda_prefix().joinpath('include', 'Arduino')
     elif platform.system() == 'Windows':
         return ch.conda_prefix().joinpath('Library', 'include', 'Arduino')
-    raise f'Unsupported platform: {platform.system()}'
+    raise RuntimeError(f'Unsupported platform: {platform.system()}')
 
 
 def package_path() -> path:
@@ -54,7 +54,7 @@ def get_includes() -> List[path]:
 
         import arduino_rpc
         ...
-        print ' '.join(['-I%s' % i for i in arduino_rpc.get_includes()])
+        print(' '.join(['-I%s' % i for i in arduino_rpc.get_includes()]))
         ...
 
     """

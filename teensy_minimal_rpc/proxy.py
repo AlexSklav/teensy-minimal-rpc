@@ -50,7 +50,7 @@ try:
 
             [1]: https://www.pjrc.com/teensy/K20P64M72SF1RM.pdf
             """
-            return uuid.UUID(bytes=np.array(self._uuid(), dtype='uint8').tostring())
+            return uuid.UUID(bytes=np.array(self._uuid(), dtype='uint8').tobytes())
 
 
     class StateMixin(StateMixinBase):
@@ -69,7 +69,7 @@ try:
         host_package_name = str(path(__file__).parent.name.replace('_', '-'))
 
         def __init__(self, *args, **kwargs):
-            super(ProxyMixin, self).__init__(*args, **kwargs)
+            super().__init__(*args, **kwargs)
             self.init_dma()
             logger.debug('Initialized DMA')
 

@@ -184,7 +184,7 @@ class AdcSampler:
         df_errors = df_dma_registers.loc[(df_dma_registers.full_name == 'ERR')
                                          & (df_dma_registers.value > 0)]
         if df_errors.shape[0] > 0:
-            raise IOError('One or more DMA errors occurred.\n%s' % df_errors)
+            raise IOError(f'One or more DMA errors occurred.\n{df_errors}')
 
     def allocate_device_arrays(self):
         '''
@@ -495,13 +495,13 @@ class AdcSampler:
                 tcd_i['CSR'] |= (1 << 1)  # Set `INTMAJOR` (21.3.29/426)
             # Copy TCD for sample number `i` to device.
             self.proxy().mem_cpy_host_to_device(self.tcd_addrs[i],
-                                                tcd_i.tostring())
+                                                tcd_i.tobytes())
 
         # Load initial TCD in scatter chain to DMA channel chosen to handle
         # scattering.
         self.proxy().mem_cpy_host_to_device(self.hw_tcd_addrs
                                             [self.dma_channels.scatter],
-                                            tcd0.tostring())
+                                            tcd0.tobytes())
         # Attach interrupt handler to scatter DMA channel.
         self.proxy().attach_dma_interrupt(self.dma_channels.scatter)
 
@@ -565,14 +565,14 @@ class AdcSampler:
         # Set PDB interrupt to occur when IDLY is equal to CNT + 1.
         # PDB0_IDLY = 1
         self.proxy().mem_cpy_host_to_device(pdb.PDB0_IDLY,
-                                            np.uint32(1).tostring())
+                                            np.uint32(1).tobytes())
 
         clock_divide = pdb.get_pdb_divide_params(sample_rate_hz).iloc[0]
 
         # PDB0_MOD = (uint16_t)(mod-1);
         self.proxy().mem_cpy_host_to_device(pdb.PDB0_MOD,
                                             np.uint32(clock_divide.clock_mod)
-                                            .tostring())
+                                            .tobytes())
 
         PDB_CONFIG = (pdb.PDB_SC_TRGSEL(15)  # Software trigger
                       | pdb.PDB_SC_PDBEN  # Enable PDB
@@ -709,7 +709,7 @@ class AdcSampler:
             datetimes_i = [datetime_i + dt.timedelta(seconds=t_j)
                            for t_j in np.arange(self.sample_count) *
                            1. / self.sample_rate_hz]
-            df_adc_results_i = pd.DataFrame(np.fromstring(packet_i.data(),
+            df_adc_results_i = pd.DataFrame(np.frombuffer(packet_i.data(),
                                                           dtype='uint16')
                                             .reshape(-1, self.sample_count).T,
                                             columns=self.channels,
@@ -786,7 +786,7 @@ class AdcDmaMixin:
         import arduino_helpers.hardware.teensy.dma as dma
         from .DMA import TCD
 
-        tcd = TCD.FromString(self.read_dma_TCD(dma_channel).tostring())
+        tcd = TCD.FromString(self.read_dma_TCD(dma_channel).tobytes())
         df_tcd = resolve_field_values(tcd)
         return (df_tcd[['full_name', 'value']].dropna()
                 .join(dma.TCD_DESCRIPTIONS, on='full_name')
@@ -812,7 +812,7 @@ class AdcDmaMixin:
         from .DMA import Registers
 
         dma_registers = (Registers
-                         .FromString(self.read_dma_registers().tostring()))
+                         .FromString(self.read_dma_registers().tobytes()))
         df_dma = resolve_field_values(dma_registers)
         return (df_dma.dropna(subset=['value'])
         .join(dma.REGISTERS_DESCRIPTIONS, on='full_name')
@@ -894,8 +894,8 @@ class AdcDmaMixin:
         #      * Operate on variable by reference, on-device use actual register.
         #  - Add `arduino_helpers.hardware.teensy` function to convert between TCD
         #    protobuf message and binary TCD struct.
-        self.mem_cpy_host_to_device(HW_TCDS_ADDR, tcd_struct.tostring())
-        return TCD.FromString(self.read_dma_TCD(0).tostring())
+        self.mem_cpy_host_to_device(HW_TCDS_ADDR, tcd_struct.tobytes())
+        return TCD.FromString(self.read_dma_TCD(0).tobytes())
 
     def analog_reads_config(self, adc_channels, sample_count,
                             resolution=None, average_count=1,
