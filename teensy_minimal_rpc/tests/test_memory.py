@@ -77,7 +77,9 @@ def test_str_echo(proxy):
     Test sending a string to device and back again.
     '''
     value = 'hello, world'
-    assert proxy.str_echo(msg=value).tobytes() == value
+    # __N.B.,__ `str` arguments are UTF-8 encoded by the generated RPC proxy,
+    # and the echoed result comes back as raw bytes.
+    assert proxy.str_echo(msg=value).tobytes() == value.encode('utf-8')
 
 
 @pytest.mark.parametrize("array", [np.arange(100, dtype='uint32'),
