@@ -1,4 +1,5 @@
 # coding: utf-8
+import logging
 import platform
 
 import conda_helpers as ch
@@ -7,10 +8,21 @@ from typing import List, Dict
 
 from path_helpers import path
 
+logger = logging.getLogger(__name__)
+
 try:
-    from .config import Config, State
-except (ImportError, TypeError):
-    pass
+    # __N.B.,__ `Config` and `State` live in *separate* generated modules
+    # (`config.py` and `state.py`, respectively).
+    from .config import Config
+    from .state import State
+except (ImportError, TypeError) as e:
+    # The `config`/`state` modules are generated at build time; they are
+    # legitimately missing during a fresh conda build, so keep the warning to a
+    # single (still diagnosable) line and reserve the traceback for debug level.
+    logger.warning(f'Could not import `Config`/`State` from `{__name__}`: '
+                   f'{e!r}')
+    logger.debug(f'Could not import `Config`/`State` from `{__name__}`',
+                 exc_info=True)
 
 from .proxy import Proxy, I2cProxy, SerialProxy
 

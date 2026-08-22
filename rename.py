@@ -16,16 +16,25 @@ def main(root, old_name, new_name):
     # Dashes are used in Python package names, but underscores are used in
     # Python module names.
     for p in path(root).walkfiles():
-        data = p.bytes()
-        if '.git' not in p and (names.old in data or
-                                underscore_names.old in data or
-                                camel_names.old in data):
-            p.write_bytes(data.replace(names.old, names.new)
-                          .replace(underscore_names.old, underscore_names.new)
-                          .replace(camel_names.old, camel_names.new))
+        # __N.B.,__ `path` is not iterable, so compare against `str(p)`.
+        if '.git' in str(p):
+            continue
+        try:
+            # __N.B.,__ operate on `str` (not `bytes`), since the names being
+            # substituted are `str`.  Skip any file that is not valid UTF-8
+            # text (e.g., compiled firmware, images).
+            data = p.text(encoding='utf-8')
+        except (UnicodeDecodeError, ValueError):
+            continue
+        if (names.old in data or underscore_names.old in data or
+                camel_names.old in data):
+            p.write_text(data.replace(names.old, names.new)
+                         .replace(underscore_names.old, underscore_names.new)
+                         .replace(camel_names.old, camel_names.new),
+                         encoding='utf-8')
 
     def rename_path(p):
-        if '.git' in p:
+        if '.git' in str(p):
             return
         if underscore_names.old in p.name:
             p.rename(p.parent.joinpath(p.name.replace(underscore_names.old,

@@ -83,7 +83,13 @@ try:
     class SerialProxy(ProxyMixin, _SerialProxy):
         pass
 
-except (ImportError, TypeError):
+except (ImportError, TypeError) as e:
+    # The `node`/`config`/`state` modules are generated at build time; they are
+    # legitimately missing during a fresh conda build, so keep the warning to a
+    # single (still diagnosable) line and reserve the traceback for debug level.
+    logger.warning(f'Could not import proxy classes from `{__name__}`: {e!r}')
+    logger.debug(f'Could not import proxy classes from `{__name__}`',
+                 exc_info=True)
     Proxy = None
     I2cProxy = None
     SerialProxy = None

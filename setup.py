@@ -7,6 +7,8 @@ from file_handler import get_properties
 
 properties = get_properties(package_name='teensy-minimal-rpc')['LIB_PROPERTIES']
 
+package_name = properties['package_name'].replace('-', '_')
+
 setup(name=properties['package_name'],
       version=versioneer.get_version(),
       cmdclass=versioneer.get_cmdclass(),
@@ -18,4 +20,6 @@ setup(name=properties['package_name'],
       url=properties['url'],
       license=properties['license'],
       include_package_data=True,  # Install data listed in `MANIFEST.in`
-      packages=[properties['package_name'].replace('-', '_')])
+      packages=[package_name,
+                f'{package_name}.bin',
+                f'{package_name}.tests'])

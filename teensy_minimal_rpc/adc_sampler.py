@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import io
 import pkgutil
+import time
 import weakref
 
 import numpy as np
@@ -14,6 +15,38 @@ import arduino_helpers.hardware.teensy.pdb as pdb
 
 from . import DMA
 from . import SIM
+
+#: Delay between polls while waiting for a streamed DMA ADC result.
+STREAM_POLL_INTERVAL_S = 1e-3
+
+
+def _wait_for_stream_packet(stream_queue, timeout_s=None):
+    """
+    Block until at least one packet is available in ``stream_queue``.
+
+    Parameters
+    ----------
+    stream_queue : queue.Queue
+        Queue of ``(timestamp, packet)`` tuples.
+    timeout_s : float, optional
+        Maximum time to wait, in seconds.  If ``None``, wait indefinitely.
+
+    Raises
+    ------
+    IOError
+        If ``timeout_s`` elapses before a packet is available.
+
+    Notes
+    -----
+    Sleeps :data:`STREAM_POLL_INTERVAL_S` between polls rather than spinning,
+    to avoid pinning a CPU core while waiting.
+    """
+    start_time = time.monotonic()
+    while stream_queue.qsize() < 1:
+        if (timeout_s is not None and
+                (time.monotonic() - start_time) > timeout_s):
+            raise IOError('Timed out waiting for streamed result.')
+        time.sleep(STREAM_POLL_INTERVAL_S)
 
 
 def get_adc_configs(F_BUS=48e6, ADC_CLK=22e6):
@@ -105,11 +138,22 @@ class AdcSampler:
     sample_count : int
         Number of samples to measure from each channel during each read
         operation.
-    dma_channels : list,optional
-        List of identifiers of DMA channels to use (default=``[0, 1, 2]``).
+    dma_channels : pandas.Series,optional
+        Identifiers of the DMA channels to use, indexed by role.
+
+        **Must** be a :class:`pandas.Series` with (at least) the index labels
+        ``'scatter'``, ``'adc_channel_configs'`` and ``'adc_conversion'``,
+        since the channels are looked up by attribute access (e.g.,
+        ``dma_channels.scatter``).
+
+        Defaults to ``pd.Series([0, 1, 2], index=['scatter',
+        'adc_channel_configs', 'adc_conversion'])``.
     adc_number : int
         Identifier of ADC to use (default=:data:`teensy.ADC_0`)
     """
+
+    #: Index labels required in :attr:`dma_channels`.
+    DMA_CHANNEL_ROLES = ('scatter', 'adc_channel_configs', 'adc_conversion')
 
     def __init__(self, proxy, channels, sample_count,
                  dma_channels=None, adc_number=teensy.ADC_0):
@@ -120,12 +164,24 @@ class AdcSampler:
             # Single channel was specified.  Wrap channel in list.
             channels = [channels]
         self.channels = channels
+        if sample_count < 1:
+            raise ValueError('`sample_count` must be at least 1 (got '
+                             f'{sample_count!r}).')
         # The number of samples to record for each ADC channel.
         self.sample_count = sample_count
         if dma_channels is None:
             dma_channels = pd.Series([0, 1, 2],
-                                     index=['scatter', 'adc_channel_configs',
-                                            'adc_conversion'])
+                                     index=list(self.DMA_CHANNEL_ROLES))
+        elif not isinstance(dma_channels, pd.Series):
+            raise TypeError('`dma_channels` must be a `pandas.Series` indexed '
+                            f'by {list(self.DMA_CHANNEL_ROLES)} (got '
+                            f'{type(dma_channels).__name__}).')
+        missing_roles = [role for role in self.DMA_CHANNEL_ROLES
+                         if role not in dma_channels.index]
+        if missing_roles:
+            raise ValueError('`dma_channels` is missing required index '
+                             f'label(s): {missing_roles} (expected '
+                             f'{list(self.DMA_CHANNEL_ROLES)}).')
         self.dma_channels = dma_channels
         self.adc_number = adc_number
 
@@ -151,6 +207,10 @@ class AdcSampler:
 
     @sample_rate_hz.setter
     def sample_rate_hz(self, value):
+        if value is None:
+            # `None` is not a usable sampling rate: `configure_timer(None)`
+            # would fail.  Refuse to clobber any previously cached rate.
+            raise ValueError('`sample_rate_hz` must not be `None`.')
         if self.sample_rate_hz != value:
             self._sample_rate_hz = value
             self.pdb_config = self.configure_timer(self._sample_rate_hz)
@@ -469,7 +529,12 @@ class AdcSampler:
                            SLAST=-self.N,
                            DADDR=int(self.allocs.samples),
                            DOFF=2 * self.sample_count,
-                           DLASTSGA=int(self.tcd_addrs[1]),
+                           # The scatter chain wraps, so the TCD following the
+                           # last one is the first one.  __N.B.,__ with
+                           # `sample_count == 1` there is only a single TCD,
+                           # which therefore links back to itself.
+                           DLASTSGA=int(self.tcd_addrs[1 %
+                                                       len(self.tcd_addrs)]),
                            CSR=DMA.R_TCD_CSR(START=0, DONE=False, ESG=True))
 
         # Convert Protocol Buffer encoded TCD to bytes structure (see
@@ -570,9 +635,15 @@ class AdcSampler:
         clock_divide = pdb.get_pdb_divide_params(sample_rate_hz).iloc[0]
 
         # PDB0_MOD = (uint16_t)(mod-1);
+        #
+        # The PDB counter period is `MOD + 1` counts (it counts `0..MOD`
+        # inclusive), so the modulus register must be written with one less
+        # than the computed divisor to hit the requested sampling rate.  This
+        # matches the `(mod-1)` convention used by the Teensy PDB examples.
+        # Guard against a negative value for very fast requested rates.
+        clock_mod = int(max(0, int(clock_divide.clock_mod) - 1))
         self.proxy().mem_cpy_host_to_device(pdb.PDB0_MOD,
-                                            np.uint32(clock_divide.clock_mod)
-                                            .tobytes())
+                                            np.uint32(clock_mod).tobytes())
 
         PDB_CONFIG = (pdb.PDB_SC_TRGSEL(15)  # Software trigger
                       | pdb.PDB_SC_PDBEN  # Enable PDB
@@ -640,11 +711,15 @@ class AdcSampler:
         .. _K20P64M72SF1RM: https://www.pjrc.com/teensy/K20P64M72SF1RM.pdf
         """
         self.proxy().attach_dma_interrupt(self.dma_channels.scatter)
-        if sample_rate_hz is None and self.sample_rate_hz is None:
-            raise ValueError('No cached sampling rate available.  Must specify'
-                             ' `sample_rate_hz` (can be omitted on subsequent '
-                             'calls).')
-        self.sample_rate_hz = sample_rate_hz
+        if sample_rate_hz is None:
+            if self.sample_rate_hz is None:
+                raise ValueError('No cached sampling rate available.  Must '
+                                 'specify `sample_rate_hz` (can be omitted on '
+                                 'subsequent calls).')
+            # Reuse the cached sampling rate (and the corresponding, already
+            # computed, PDB configuration).
+        else:
+            self.sample_rate_hz = sample_rate_hz
 
         # Copy configured PDB register state to device hardware register.
         result = self.proxy().start_dma_adc(self.pdb_config,
@@ -692,15 +767,10 @@ class AdcSampler:
         -----
             **Does not guarantee result is ready!**
         """
-        stream_queue = self.proxy()._packet_watcher.queues.stream
+        stream_queue = self.proxy().queues['stream']
         frames = []
 
-        start_time = dt.datetime.now()
-        while stream_queue.qsize() < 1:
-            if (timeout_s is not None and (timeout_s <
-                                           (dt.datetime.now() -
-                                            start_time).total_seconds())):
-                raise IOError('Timed out waiting for streamed result.')
+        _wait_for_stream_packet(stream_queue, timeout_s)
 
         # At least one packet is available in the ADC stream queue.
         packet_count = stream_queue.qsize()
@@ -722,8 +792,25 @@ class AdcSampler:
                 .reorder_levels(['stream_id', 0]))
 
     def __del__(self):
-        self.allocs[['scan_result', 'samples']].map(self.proxy().mem_free)
-        self.allocs[['sc1as', 'tcds']].map(self.proxy().mem_aligned_free)
+        # __N.B.,__ `self.proxy` is a weak reference, so the referent may
+        # already be gone (e.g., during interpreter shutdown), in which case
+        # there is nothing left to free.  Also avoid `pandas` operations here,
+        # since module globals may already have been torn down.
+        try:
+            proxy = self.proxy()
+            if proxy is None:
+                return
+            allocs = dict(self.allocs)
+            for name in ('scan_result', 'samples'):
+                if name in allocs:
+                    proxy.mem_free(allocs[name])
+            for name in ('sc1as', 'tcds'):
+                if name in allocs:
+                    proxy.mem_aligned_free(allocs[name])
+        except Exception:
+            # Never raise from `__del__`; the interpreter would only print
+            # (and discard) the exception anyway.
+            pass
 
 
 class AdcDmaMixin:
@@ -1046,7 +1133,15 @@ class AdcDmaMixin:
         # **TODO** The reasoning behind selecting the minimum conversion
         # rate is that we expect it to lead to the lowest noise possible
         # while still matching the specified requirements.
-        min_match_index = matching_settings['conversion_rate'].argmin()
+        if matching_settings.shape[0] < 1:
+            raise ValueError('No ADC configuration matches the requested '
+                             f'settings (resolution={resolution}, '
+                             f'average_count={average_count}, mode={mode}, '
+                             f'sampling_rate_hz={sampling_rate_hz}).')
+        # __N.B.,__ use `idxmin()` (which returns an index *label*) rather than
+        # `argmin()` (which returns a *positional* index), since the result is
+        # used for a label-based `.loc[]` lookup.
+        min_match_index = matching_settings['conversion_rate'].idxmin()
         adc_settings = matching_settings.loc[min_match_index].copy()
 
         if resolution is None:
@@ -1069,7 +1164,11 @@ class AdcDmaMixin:
         adc_settings['differential'] = differential
 
         # Verify that a valid gain value has been specified.
-        assert (gain_power >= 0 and gain_power < 8)
+        # __N.B.,__ use an explicit exception rather than `assert`, since
+        # `gain_power` is user-supplied and `assert` is stripped by `python -O`.
+        if not (0 <= gain_power < 8):
+            raise ValueError('`gain_power` must be in the range [0, 8) (got '
+                             f'{gain_power!r}).')
         adc_settings['gain_power'] = int(gain_power)
 
         # Construct a Protocol Buffer message according to the selected ADC
@@ -1191,12 +1290,7 @@ class AdcDmaMixin:
                                      gain_power=gain_power,
                                      adc_num=adc_num)
         adc_sampler.start_read(sample_rate_hz=sample_rate_hz)
-        start_time = dt.datetime.now()
-        while self._packet_watcher.queues.stream.qsize() < 1:
-            if (timeout_s is not None and (timeout_s <
-                                           (dt.datetime.now() -
-                                            start_time).total_seconds())):
-                raise IOError('Timed out waiting for streamed result.')
+        _wait_for_stream_packet(self.queues['stream'], timeout_s)
         df_adc_results = adc_sampler.get_results_async()
         return (sample_rate_hz, adc_settings) + \
             format_adc_results(df_adc_results, adc_settings)
