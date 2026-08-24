@@ -68,7 +68,7 @@ def get_adc_configs(F_BUS=48e6, ADC_CLK=22e6):
     a result.
 
 
-    .. versionchanged:: X.X.X
+    .. versionchanged:: 0.10.6
         Load table of ADC configurations using ``pkgutil`` to support reading
         from ``.zip`` files, e.g., Py2Exe ``library.zip`` packaged modules.
     """
