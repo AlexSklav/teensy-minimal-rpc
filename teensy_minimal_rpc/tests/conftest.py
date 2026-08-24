@@ -17,7 +17,9 @@ def proxy():
                     'generated `node` module is missing).')
     try:
         proxy = tr.SerialProxy()
-    except IOError as e:
+    except (IOError, IndexError) as e:
+        # N.B. `SerialProxy.__init__` raises `IndexError` (rather than
+        # `IOError`) when device discovery returns an empty frame.
         pytest.skip(f'No Teensy device available: {e}')
 
     try:
